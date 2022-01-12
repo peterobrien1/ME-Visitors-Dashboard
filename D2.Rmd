@@ -1,5 +1,6 @@
 ---
 title: "Dashboard Concept"
+author: Peter O'Brien
 output: 
   flexdashboard::flex_dashboard:
     orientation: columns
