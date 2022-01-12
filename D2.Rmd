@@ -1,0 +1,167 @@
+---
+title: "Dashboard Concept"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+
+options(scipen = 999)
+
+library(shiny)
+library(flexdashboard)
+library(tidyverse)
+library(DT)
+library(boxr)
+library(ggthemes)
+library(plotly)
+library(scales)
+library(shinymanager)
+library(usethis)
+
+## Put this as functions in the prep file ##
+
+# Load data
+load("TopRoutesVisitors_19&20 - Monthly.RData")
+load("TopRoutesVisitors_19&20 - Weekly.RData")
+
+data2 <- data2 %>% 
+  select(-`Zone ID`)
+data2 <- na.omit(data2)
+data <- na.omit(data)
+
+
+
+# Prep monthly data
+data <- data %>% 
+  select(4, 7, 10, 11, 12, 13) %>% 
+  rename(Route = `Zone Name`) %>% 
+  rename(State = `State Name`) %>% 
+  rename(DailyAverage = avg_daily_by) %>% 
+  rename(MonthTotal = month_total)
+data$month <- factor(data$month, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"))
+data$year <- as.character(data$year)
+data$Route <- as.factor(data$Route)
+data$State <- as.factor(data$State)
+data <- data %>% 
+  filter(State != "Maine")
+
+
+# Prep weekly data
+keystates <- c("Vermont", "New Hampshire", "New Jersey", "New York", "Massachusetts", "Connecticut")
+data2 <- data2 %>% 
+  rename(state = `State Name`) %>% 
+  filter(state %in% keystates)
+
+data2 <- data2 %>% 
+  group_by(week, year) %>% 
+  summarise(Trips = sum(weeklytraffic))
+data2$year <- as.factor(data2$year)
+```
+ 
+
+```{r}
+# Updates bar chart
+updateData <- reactive(
+  data %>% 
+    group_by(!!! rlang::syms(input$GB), year) %>% 
+    summarise(Trips = sum(MonthTotal))) 
+```
+
+
+Bar Chart
+===================================== 
+
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+<br>
+
+
+```{r}
+selectInput(inputId = "GB", label = "Variable", 
+            choices = names(select_if(data, is.factor)),        
+            selected = 'Route')
+
+```
+
+Route = Entry Route into Maine
+
+
+<br>
+
+
+State = State of Origin 
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Border Crossings (non-Maine Residents)
+
+```{r}
+renderPlot({
+ updateData() %>% 
+  ggplot(aes(x=!! rlang::sym(input$GB),y = Trips, fill = year)) +
+  geom_col() +
+  theme_tufte() +
+  scale_y_continuous(labels = comma) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(x = input$GB, y = "Trip Total", fill = "Year") 
+})
+```
+  
+
+Line Graph 
+===================================== 
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+  
+### Out-of-State Visitor Volumes (NH, MA, VT, NY, NJ, CT), July - October 
+  
+```{r}
+renderPlotly({ 
+  p2 <- data2 %>% 
+    ggplot(aes(x = week, y = Trips, col = year)) +
+    geom_point() +
+    geom_line(aes(group = year)) + 
+    scale_x_continuous(limits = c(26, 41), breaks = seq(26, 41, 1)) +
+    scale_y_continuous(labels = comma) +
+    theme_tufte() +
+    labs(col = "Year", y = "Total Incoming Traffic", x = "Week") +
+    geom_vline(xintercept = 32, color = 'red') +
+    geom_vline(xintercept = 27, linetype="dotted", color = 'grey') +
+    geom_vline(xintercept = 36, linetype="dotted", color = 'grey') +
+    geom_vline(xintercept = 40, linetype="dotted", color = 'grey') +
+    annotate("text", x = 33.7, y = 320000, label = "'Travel Safely' Campaign Begins") +
+    annotate("text", x = 32.4, y = 330000, label = "Aug") +
+    annotate("text", x = 27.4, y = 330000, label = "Jul") +
+    annotate("text", x = 36.4, y = 330000, label = "Sep") +
+    annotate("text", x = 40.4, y = 330000, label = "Oct") 
+p2 <- ggplotly()    
+})
+```
+
+
+### Table 
+```{r}
+renderDT(
+  data, rownames = F, extensions = 'Buttons', filter = "top", editable = T,
+  options = list( 
+    dom = 'Blfrtip',
+    pageLength = 20, 
+    scrollY = "200px",
+    lengthMenu = list(c(10,50,100,-1),c(10,50,100,"All"))
+  )
+)
+```
+
+
+
+
